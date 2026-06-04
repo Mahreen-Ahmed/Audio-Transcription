@@ -150,19 +150,19 @@ Visit `http://localhost:8000/docs` for the Swagger UI.
 
 ---
 
-### 2. Supabase for Database & Storage
+### 2. Supabase with SQLite & Local Storage Fallback
 
-**Problem**: Need durable, queryable job state and object storage for audio/transcripts, without managing separate services.
+**Problem**: Need durable, queryable job state and object storage, but don't want the app to break if Supabase is unavailable.
 
-**Decision**: Use Supabase (built on PostgreSQL) for both database and object storage:
-- **Database**: `transcription_jobs` table tracks the full job lifecycle: `pending → processing → completed/failed`
-- **Storage**: `audio-files` bucket for uploaded audio, `transcripts` bucket for saved transcript files
+**Decision**: Use Supabase as primary, but with fallbacks:
+- **Database**: Try Supabase first; if unavailable, fall back to local SQLite
+- **Storage**: Try Supabase first; if unavailable, fall back to local file storage
+- **Unified Interfaces**: `database_service` and `storage_service` abstract away which backend we're using
 
-**Why Supabase?**
-- One platform handles both database and storage, reducing operational complexity
-- Built on PostgreSQL, giving ACID guarantees, easy querying, and pagination
-- Object storage with CDN, signed URLs, and security policies
-- Generous free tier for development
+**Why?**
+- Resilience: App works even without internet/Supabase
+- Dev-friendliness: Easy to develop locally without Supabase
+- Flexibility: Can switch between backends without changing app code
 
 ---
 

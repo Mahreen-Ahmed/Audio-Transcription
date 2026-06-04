@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 
 from app.core.queue import init_queue
+from app.core.database import init_db
 from app.core.config import settings
 from app.api.routes import router
 from app.services.supabase_service import supabase_service
@@ -12,6 +13,9 @@ from app.services.supabase_service import supabase_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize SQLite database if Supabase not configured
+    if not supabase_service.is_configured():
+        await init_db()
     await init_queue()
     yield
 
@@ -45,19 +49,19 @@ async def health():
     health_status = {
         "status": "ok",
         "database": "ok",
-        "supabase": "not_configured"
+        "database_type": "supabase" if supabase_service.is_configured() else "sqlite",
+        "storage": "ok"
     }
     
-    # Check Supabase connection
+    # Check Supabase connection if configured
     if supabase_service.is_configured():
         try:
             client = supabase_service.get_service_client()
             if client:
                 # Try a simple query to test connection
                 response = client.table("transcription_jobs").select("count", count="exact").limit(0).execute()
-                health_status["supabase"] = "ok"
         except Exception as e:
-            health_status["supabase"] = f"error: {str(e)}"
+            health_status["database"] = f"error: {str(e)}"
     
     return health_status
 

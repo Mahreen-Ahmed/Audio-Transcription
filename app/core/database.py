@@ -8,10 +8,11 @@ class Base(DeclarativeBase):
     pass
 
 
+# Use SQLite for local fallback
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    "sqlite+aiosqlite:///./transcription_jobs.db",
     echo=settings.APP_ENV == "development",
-    pool_pre_ping=True,
+    connect_args={"check_same_thread": False}
 )
 
 AsyncSessionLocal = async_sessionmaker(

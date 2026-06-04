@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from app.core.queue import enqueue_transcription
 from app.services.storage import storage_service
-from app.services.supabase_service import supabase_service
+from app.services.database_service import database_service
 
 router = APIRouter()
 
@@ -47,14 +47,11 @@ class UploadResponse(BaseModel):
 async def upload_audio(
     file: UploadFile = File(..., description="Audio file (mp3, wav, m4a, ogg, flac)"),
 ):
-    if not supabase_service.is_configured():
-        raise HTTPException(status_code=500, detail="Supabase is not configured")
-    
-    # Save audio
+    # Save audio (uses Supabase if available, otherwise local)
     job_id, audio_path = await storage_service.save_audio(file)
 
-    # Create DB record in Supabase
-    await supabase_service.create_job(job_id, file.filename, audio_path)
+    # Create DB record (uses Supabase if available, otherwise SQLite)
+    await database_service.create_job(job_id, file.filename, audio_path)
 
     # Enqueue for async processing
     await enqueue_transcription(job_id, audio_path)
@@ -72,10 +69,7 @@ async def upload_audio(
     summary="Get transcription status and result",
 )
 async def get_transcription(job_id: str):
-    if not supabase_service.is_configured():
-        raise HTTPException(status_code=500, detail="Supabase is not configured")
-    
-    job = await supabase_service.get_job(job_id)
+    job = await database_service.get_job(job_id)
 
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
@@ -93,10 +87,7 @@ async def list_transcriptions(
     page_size: int = Query(10, ge=1, le=100),
     status: Optional[str] = Query(None, description="Filter by status"),
 ):
-    if not supabase_service.is_configured():
-        raise HTTPException(status_code=500, detail="Supabase is not configured")
-    
-    jobs, total = await supabase_service.list_jobs(status, page, page_size)
+    jobs, total = await database_service.list_jobs(status, page, page_size)
 
     return JobListResponse(
         jobs=[JobResponse(**j) for j in jobs],
@@ -112,10 +103,7 @@ async def list_transcriptions(
     summary="Delete a transcription job",
 )
 async def delete_transcription(job_id: str):
-    if not supabase_service.is_configured():
-        raise HTTPException(status_code=500, detail="Supabase is not configured")
-    
-    job = await supabase_service.get_job(job_id)
+    job = await database_service.get_job(job_id)
 
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
@@ -126,4 +114,4 @@ async def delete_transcription(job_id: str):
         )
 
     storage_service.delete_audio(job["audio_path"])
-    await supabase_service.delete_job(job_id)
+    await database_service.delete_job(job_id)

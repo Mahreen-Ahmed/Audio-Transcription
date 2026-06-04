@@ -1,33 +1,28 @@
 import asyncio
-from datetime import datetime, timezone
 
 from app.core.config import settings
 from app.core.queue import redis_settings, enqueue_transcription
 from app.services.transcriber import transcribe_audio
 from app.services.storage import storage_service
-from app.services.supabase_service import supabase_service
+from app.services.database_service import database_service
 
 
 async def process_transcription(ctx, *, job_id: str, audio_path: str, retry: int = 0):
     """
     Main worker function: picks up a transcription job, runs Whisper,
-    updates Supabase, and handles retries on failure.
+    updates database, and handles retries on failure.
     """
     print(f"[Worker] Processing job {job_id} (attempt {retry + 1})")
 
-    if not supabase_service.is_configured():
-        print("[Worker] Supabase not configured!")
-        return
-
     # Fetch job
-    job = await supabase_service.get_job(job_id)
+    job = await database_service.get_job(job_id)
 
     if not job:
         print(f"[Worker] Job {job_id} not found, skipping")
         return
 
     # Mark as processing
-    await supabase_service.update_job_status(job_id, "processing")
+    await database_service.update_job_status(job_id, "processing")
 
     try:
         # Run transcription (blocking CPU call — run in thread pool)
@@ -38,7 +33,7 @@ async def process_transcription(ctx, *, job_id: str, audio_path: str, retry: int
         storage_service.save_transcript(job_id, transcription["text"])
 
         # Update job as completed
-        await supabase_service.update_job_status(
+        await database_service.update_job_status(
             job_id,
             "completed",
             transcript=transcription["text"],
@@ -54,10 +49,7 @@ async def process_transcription(ctx, *, job_id: str, audio_path: str, retry: int
 
 
 async def _handle_failure(job_id: str, audio_path: str, error: str, retry: int):
-    if not supabase_service.is_configured():
-        return
-
-    await supabase_service.update_job_status(
+    await database_service.update_job_status(
         job_id,
         "pending" if retry < settings.MAX_RETRIES - 1 else "failed",
         error_message=error,
