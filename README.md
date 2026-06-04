@@ -1,6 +1,6 @@
 # 🎙️ Audio Transcription Service
 
-A production-ready async audio transcription API built with **FastAPI**, **OpenAI Whisper**, **PostgreSQL**, and **Redis**. Upload audio files and retrieve transcripts asynchronously via a clean REST API.
+A production-ready async audio transcription API built with **FastAPI**, **OpenAI Whisper**, **PostgreSQL**, **Redis**, and **Supabase**. Upload audio files and retrieve transcripts asynchronously via a clean REST API.
 
 ---
 
@@ -19,13 +19,12 @@ Client
 ┌─────────────────┐        ┌─────────────────┐
 │   PostgreSQL    │◀───────│  ARQ Worker(s)  │
 │   (job state)   │        │ (Whisper model) │
-└─────────────────┘        └─────────────────┘
+└────────┬────────┘        └─────────────────┘
          │
          ▼
 ┌─────────────────┐
-│ Local Storage   │
-│ /audio          │
-│ /transcripts    │
+│  Supabase (or)  │
+│  Local Storage  │
 └─────────────────┘
 ```
 
@@ -39,7 +38,7 @@ Client
 | `GET` | `/api/v1/transcriptions/{job_id}` | Poll job status + get transcript |
 | `GET` | `/api/v1/transcriptions` | List all jobs (paginated, filterable) |
 | `DELETE` | `/api/v1/transcriptions/{job_id}` | Delete a job and its audio |
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Health check (includes Supabase status) |
 
 ### Upload Response
 ```json
@@ -73,6 +72,7 @@ Job `status` values: `pending` → `processing` → `completed` | `failed`
 
 ### Prerequisites
 - Docker + Docker Compose
+- (Optional) Supabase account
 
 ### 1. Clone and configure
 ```bash
@@ -81,7 +81,38 @@ cd audio-transcription-service
 cp .env.example .env
 ```
 
-### 2. Start all services
+### 2. (Optional) Set up Supabase
+1. Go to https://supabase.com and create a project
+2. Get your credentials from Project Settings → API
+3. Add to `.env`:
+   ```env
+   SUPABASE_URL=https://<project-id>.supabase.co
+   SUPABASE_ANON_KEY=<your-anon-key>
+   SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+   ```
+4. Create two storage buckets in Supabase:
+   - `audio-files` (for uploaded audio)
+   - `transcripts` (for saved transcriptions)
+5. Add these policies to both buckets:
+   ```sql
+   -- For audio-files bucket
+   CREATE POLICY "Allow authenticated uploads"
+   ON storage.objects FOR INSERT TO authenticated
+   WITH CHECK (bucket_id = 'audio-files');
+
+   CREATE POLICY "Allow public downloads"
+   ON storage.objects FOR SELECT
+   USING (bucket_id = 'audio-files');
+
+   -- For transcripts bucket
+   CREATE POLICY "Service role can manage files"
+   ON storage.objects FOR ALL
+   TO service_role
+   USING (bucket_id = 'transcripts');
+   ```
+6. (Optional) Create the `transcription_jobs` table in Supabase with the SQL provided earlier
+
+### 3. Start all services
 ```bash
 docker compose up --build
 ```
@@ -92,7 +123,7 @@ This starts:
 - **PostgreSQL** database
 - **Redis** queue
 
-### 3. Try it out
+### 4. Try it out
 ```bash
 # Upload an audio file
 curl -X POST http://localhost:8000/api/v1/transcriptions \
@@ -102,7 +133,7 @@ curl -X POST http://localhost:8000/api/v1/transcriptions \
 curl http://localhost:8000/api/v1/transcriptions/JOB_ID
 ```
 
-### 4. Interactive docs
+### 5. Interactive docs
 Visit `http://localhost:8000/docs` for the Swagger UI.
 
 ---
@@ -119,13 +150,19 @@ Visit `http://localhost:8000/docs` for the Swagger UI.
 
 ---
 
-### 2. PostgreSQL for Job State
+### 2. Supabase for Database & Storage
 
-**Problem:** Need durable, queryable job state (status, transcript, timestamps).
+**Problem**: Need durable, queryable job state and object storage for audio/transcripts, without managing separate services.
 
-**Decision:** PostgreSQL with SQLAlchemy async ORM. Job rows track the full lifecycle: `pending → processing → completed/failed`.
+**Decision**: Use Supabase (built on PostgreSQL) for both database and object storage:
+- **Database**: `transcription_jobs` table tracks the full job lifecycle: `pending → processing → completed/failed`
+- **Storage**: `audio-files` bucket for uploaded audio, `transcripts` bucket for saved transcript files
 
-**Why not Redis alone?** Redis is ephemeral and not ideal for durable business data. PostgreSQL gives us ACID guarantees, easy querying, and pagination.
+**Why Supabase?**
+- One platform handles both database and storage, reducing operational complexity
+- Built on PostgreSQL, giving ACID guarantees, easy querying, and pagination
+- Object storage with CDN, signed URLs, and security policies
+- Generous free tier for development
 
 ---
 
@@ -140,22 +177,25 @@ Visit `http://localhost:8000/docs` for the Swagger UI.
 
 ---
 
-### 4. File Storage Strategy
+### 4. File Storage Strategy (with Supabase)
 
 **Problem:** Audio files can be large (100MB+) and transcripts need to be retrievable.
 
 **Decision:**
-- **Audio** → stored on disk at `/storage/audio/{job_id}.{ext}` (production: swap for S3)
-- **Transcripts** → stored both in PostgreSQL (for fast API response) and as `.txt` files on disk
-- Files are streamed in 1MB chunks during upload to avoid loading the whole file into memory
-
-**Production note:** Replace local disk storage with S3/GCS using the same interface — only `StorageService` needs updating.
+- **Primary: Supabase Storage**: When configured, uses Supabase's durable object storage with automatic CDN
+- **Fallback: Local Disk**: Seamless fallback for development or if Supabase is unavailable
+- **Audio** → stored in `audio-files` bucket (or `/storage/audio/{job_id}.{ext}` locally)
+- **Transcripts** → stored both in PostgreSQL (for fast API response) and in `transcripts` bucket (or as `.txt` files locally)
+- **Unified Interface**: `StorageService` abstracts storage details, making it easy to swap providers
 
 ---
 
-### 5. Whisper Model on CPU
+### 5. Whisper Model on CPU with Anti-Repetition Settings
 
-**Decision:** Using `openai-whisper` locally with `fp16=False` for CPU compatibility. Default model is `base` (good accuracy/speed tradeoff).
+**Decision:**
+- Using `openai-whisper` locally with `fp16=False` for CPU compatibility
+- Default model is `base` (good accuracy/speed tradeoff)
+- Added `no_speech_threshold=0.6` and `condition_on_previous_text=False` to reduce repetition loops
 
 **Model selection guide** (set `WHISPER_MODEL` in `.env`):
 | Model | RAM | Speed | Accuracy |
@@ -206,16 +246,17 @@ audio-transcription-service/
 │   │   ├── job.py             # SQLAlchemy ORM model
 │   │   └── schemas.py         # Pydantic request/response schemas
 │   ├── services/
-│   │   ├── storage.py         # File upload/save logic
-│   │   └── transcriber.py     # Whisper transcription logic
+│   │   ├── storage.py         # File upload/save (local + Supabase)
+│   │   ├── transcriber.py     # Whisper transcription logic
+│   │   └── supabase_service.py # Supabase client
 │   ├── workers/
 │   │   └── transcription_worker.py  # ARQ worker + retry logic
 │   └── main.py                # FastAPI app entry point
 ├── tests/
 │   └── test_api.py            # Unit + integration tests
 ├── storage/
-│   ├── audio/                 # Uploaded audio files
-│   └── transcripts/           # Saved transcript text files
+│   ├── audio/                 # Uploaded audio files (local fallback)
+│   └── transcripts/           # Saved transcript text files (local fallback)
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt

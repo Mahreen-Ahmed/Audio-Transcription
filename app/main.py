@@ -4,24 +4,30 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 
-from app.core.database import init_db
 from app.core.queue import init_queue
+from app.core.config import settings
 from app.api.routes import router
 from app.services.supabase_service import supabase_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
     await init_queue()
     yield
 
+
+# Disable docs in production
+docs_url = "/docs" if settings.APP_ENV != "production" else None
+redoc_url = "/redoc" if settings.APP_ENV != "production" else None
 
 app = FastAPI(
     title="Audio Transcription Service",
     description="Upload audio files and get transcriptions asynchronously",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url="/openapi.json" if settings.APP_ENV != "production" else None
 )
 
 app.add_middleware(
