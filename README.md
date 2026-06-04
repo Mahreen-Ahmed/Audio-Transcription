@@ -212,9 +212,20 @@ Visit `http://localhost:8000/docs` for the Swagger UI.
 
 **How it works:**
 - Multiple clients can upload simultaneously — each gets an independent `job_id`
-- The API is non-blocking (async FastAPI + asyncpg)
+- The API is non-blocking (async FastAPI)
 - Workers process up to 5 jobs concurrently (`max_jobs = 5` in WorkerSettings)
 - File streaming prevents memory spikes during concurrent uploads
+
+---
+
+### 7. Health Check & Production-Ready
+
+**Problem:** Need visibility into system status and protect internal docs in production.
+
+**Decision:**
+- `/health` endpoint shows overall status, database type, and storage status
+- Swagger UI (`/docs`) and Redoc (`/redoc`) are **disabled in production** (set `APP_ENV=production`)
+- Can still access to prevent exposing internal implementation details
 
 ---
 
@@ -248,7 +259,8 @@ audio-transcription-service/
 │   ├── services/
 │   │   ├── storage.py         # File upload/save (local + Supabase)
 │   │   ├── transcriber.py     # Whisper transcription logic
-│   │   └── supabase_service.py # Supabase client
+│   │   ├── supabase_service.py # Supabase client
+│   │   └── database_service.py # Unified database interface (Supabase/SQLite)
 │   ├── workers/
 │   │   └── transcription_worker.py  # ARQ worker + retry logic
 │   └── main.py                # FastAPI app entry point
