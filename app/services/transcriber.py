@@ -67,6 +67,8 @@ def transcribe_audio(audio_path: str) -> dict:
         actual_audio_path,
         verbose=False,
         fp16=False,
+        no_speech_threshold=0.6,
+        condition_on_previous_text=False
     )
     elapsed = time.time() - start
 
