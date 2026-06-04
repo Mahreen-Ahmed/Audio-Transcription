@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Transcription AI</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="bg-gradient"></div>
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    
+    <main class="container">
+        <header class="glass-panel">
+            <div class="header-content">
+                <div class="logo-icon">🎙️</div>
+                <div class="header-text">
+                    <h1>Neural Scribe</h1>
+                    <p>Powered by OpenAI Whisper</p>
+                </div>
+            </div>
+        </header>
+
+        <section class="upload-panel glass-panel">
+            <div id="drop-zone" class="drop-zone">
+                <input type="file" id="file-input" multiple accept=".mp3,.wav,.m4a,.ogg,.flac">
+                <div class="drop-content">
+                    <div class="upload-icon">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                    </div>
+                    <h2>Drag & Drop audio files</h2>
+                    <p>Supports MP3, WAV, M4A, OGG, FLAC (Max 100MB)</p>
+                    <button class="browse-btn">Browse Files</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="jobs-container" class="jobs-list">
+            <!-- Dynamically generated job cards will go here -->
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
