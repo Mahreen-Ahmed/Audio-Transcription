@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # Worker
     MAX_RETRIES: int = 3
     RETRY_DELAYS: list[int] = [30, 120, 600]  # seconds
+    
+    # Supabase
+    SUPABASE_URL: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
 
     class Config:
         env_file = ".env"

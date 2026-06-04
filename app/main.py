@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from app.core.database import init_db
 from app.core.queue import init_queue
 from app.api.routes import router
+from app.services.supabase_service import supabase_service
 
 
 @asynccontextmanager
@@ -35,7 +36,24 @@ app.include_router(router, prefix="/api/v1")
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    health_status = {
+        "status": "ok",
+        "database": "ok",
+        "supabase": "not_configured"
+    }
+    
+    # Check Supabase connection
+    if supabase_service.is_configured():
+        try:
+            client = supabase_service.get_service_client()
+            if client:
+                # Try a simple query to test connection
+                response = client.table("transcription_jobs").select("count", count="exact").limit(0).execute()
+                health_status["supabase"] = "ok"
+        except Exception as e:
+            health_status["supabase"] = f"error: {str(e)}"
+    
+    return health_status
 
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
